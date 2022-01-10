@@ -129,9 +129,9 @@ def E_m_n(n, top=True, aft=0.3, n_top_ch=250, n_bot_ch=234, max_m = 35):
 
     else:
         for m_bot in range(0, n+1):
-            p_ma_n = P_ma_n(n, m_top, aft=aft, top=False)
+            p_ma_n = P_ma_n(n, m_bot, aft=aft, top=False)
             for m in range(1, min(m_bot+1, max_m)):
-                p_m_ma = P_m_ma(m_top, m, top=False, n_top_ch=n_top_ch, n_bot_ch=n_bot_ch)
+                p_m_ma = P_m_ma(m_bot, m, top=False, n_top_ch=n_top_ch, n_bot_ch=n_bot_ch)
                 expectation += p_ma_n * p_m_ma * m
                 p_condition += p_ma_n * p_m_ma
     
@@ -220,7 +220,7 @@ def P_pile_n(n, top, occupancies, degeneracies,
         # the probability of a photon in one channel with certain occupancy seeing no pile-up
         p_clean_occ = 0 
         for m in range(1, min(max_m, n)):
-            p_clean_m = (p_l1_m2)**(m-1)
+            p_clean_m = (1-p_pile_m2)**(m-1)
             p_m_n = P_m_n(n=n, m=m, top=top, aft=aft, n_top_ch=1/occupancy, n_bot_ch=1/occupancy)
             p_clean_occ += p_m_n * p_clean_m
         
