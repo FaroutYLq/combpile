@@ -208,6 +208,10 @@ def P_pile_n(n, top, occupancies, degeneracies,
     Returns:
         (float): probability of an average-model channel in certain array to be piled-up with other photons
     """
+    # clean up pattern
+    occupancies = occupancies[degeneracies!=0]
+    degeneracies = degeneracies[degeneracies!=0]
+
     no_pile_prob_n = 0
     p_pile_m2 = P_pile_m2(tau=tau, mu=mu, sigma=sigma, dt=dt)
 
@@ -219,7 +223,7 @@ def P_pile_n(n, top, occupancies, degeneracies,
         
         # the probability of a photon in one channel with certain occupancy seeing no pile-up
         p_clean_occ = 0 
-        for m in range(1, min(max_m, n)):
+        for m in range(1, min(max_m, n+1)):
             p_clean_m = (1-p_pile_m2)**(m-1)
             p_m_n = P_m_n(n=n, m=m, top=top, aft=aft, n_top_ch=1/occupancy, n_bot_ch=1/occupancy)
             p_clean_occ += p_m_n * p_clean_m
