@@ -231,3 +231,189 @@ def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100),
 ##################
 
 
+def get_avg_spe_area(top, trunc_bound=[-1,4.99], spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'):
+    """From LED calibration result get the average SPE area spectrum for either array.
+
+    Args:
+        top (bool): whether or not we specify top array. 
+        trunc_bound (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        spe_areas_path (str, optional): the LED calibrated SPE areaspectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
+
+    Returns:
+        spe_areas_indices(1darray): coordinate of area spectrum in unit of PE.
+        avg_spe_areas(1darray): probability density of spe in a certaint array to have area in certain PE. 
+    """
+    spe_areas = pd.read_csv(spe_areas_path, index_col=0)
+    spe_areas_indices = np.array(spe_areas.index)
+    spe_areas_indices = np.around(spe_areas_indices,decimals=2)
+    spe_areas = np.array(spe_areas).transpose() # now spe_areas has shape (494, 600)
+
+    # normalization
+    spe_areas_norm = np.zeros(np.shape(spe_areas))
+    for i in range(494):
+        spe_areas_norm[i] = spe_areas[i]/spe_areas[i].sum()
+        if np.isnan(spe_areas_norm[i]).any():
+            spe_areas_norm[i] = 0
+            
+    spe_areas_top = np.mean(spe_areas_norm[:253], axis=0)
+    spe_areas_bot = np.mean(spe_areas_norm[253:], axis=0)
+    spe_areas_top = spe_areas_top/spe_areas_top.sum()
+    spe_areas_bot = spe_areas_bot/spe_areas_bot.sum()
+
+    if trunc_bound != None:
+        area_range = np.arange(trunc_bound[0], trunc_bound[1],0.01)
+        spe_areas_top = spe_areas_top[np.where(spe_areas_indices==trunc_bound[0])[0][0]:np.where(spe_areas_indices==trunc_bound[1])[0][0]]
+        spe_areas_bot = spe_areas_bot[np.where(spe_areas_indices==trunc_bound[0])[0][0]:np.where(spe_areas_indices==trunc_bound[1])[0][0]]
+        spe_areas_indices = area_range
+
+    if top:
+        return spe_areas_indices, spe_areas_top
+    else:
+        return spe_areas_indices, spe_areas_bot
+
+
+def get_avg_dpe_area(top, shift = 100, trunc_bound=[-1,4.99], 
+                     spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'):
+    """From self-convolutded LED calibration result get the average SPE area spectrum for either array. Note that we are assuming the DPE 
+    mechanism that makes DPE equivalent to just two independent SPEs.
+
+    Args:
+        top (bool): whether or not we specify top array. 
+        shift (int, optional): shift in number of indicies in self convolution to make sure DPE has mean exactly as twice of SPE. Defaults to 100.
+        trunc_bound (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        spe_areas_path (str, optional): the LED calibrated SPE areaspectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
+
+    Returns:
+        dpe_areas_indices(1darray): coordinate of area spectrum in unit of PE.
+        avg_dpe_areas(1darray): probability density of dpe in a certaint array to have area in certain PE. 
+    """
+    spe_areas_indices, spe_areas_top = get_avg_spe_area(True, trunc_bound=None, spe_areas_path=spe_areas_path)
+    spe_areas_indices, spe_areas_bot = get_avg_spe_area(False, trunc_bound=None, spe_areas_path=spe_areas_path)
+    
+    dpe_areas_indices = np.linspace(spe_areas_indices[0]-shift*0.01, 
+                                    spe_areas_indices[-1]+(len(spe_areas_indices)-shift-1)*0.01,
+                                    len(spe_areas_indices)*2-1)
+    # normalization
+    dpe_areas_top = np.convolve(spe_areas_top, spe_areas_top, 'full')
+    dpe_areas_top = dpe_areas_top/dpe_areas_top.sum()
+    dpe_areas_bot = np.convolve(spe_areas_bot, spe_areas_bot, 'full')
+    dpe_areas_bot = dpe_areas_bot/dpe_areas_bot.sum()
+    assert (abs(np.sum(dpe_areas_indices*dpe_areas_top) - 2*np.sum(spe_areas_indices*spe_areas_top))<0.01
+            and abs(np.sum(dpe_areas_indices*dpe_areas_top) == 2*np.sum(spe_areas_indices*spe_areas_top))<0.01
+            ), 'The input shift is wrong! It does not allow mean DPE equal to twice mean SPE.'
+
+    if trunc_bound != None:
+        area_range = np.arange(trunc_bound[0], trunc_bound[1],0.01)
+        dpe_areas_top = dpe_areas_top[np.where(dpe_areas_indices==trunc_bound[0])[0][0]:np.where(dpe_areas_indices==trunc_bound[1])[0][0]]
+        dpe_areas_bot = dpe_areas_bot[np.where(dpe_areas_indices==trunc_bound[0])[0][0]:np.where(dpe_areas_indices==trunc_bound[1])[0][0]]
+        dpe_areas_indices = area_range
+    
+    if top:
+        return dpe_areas_indices, dpe_areas_top
+    else:
+        return dpe_areas_indices, dpe_areas_bot
+
+
+def get_avg_sphd_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0.18,0.24,100),
+                      spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'):
+    """From LED calibration result get the average SPhD area spectrum as a weighted sum of SPE and DPE spectrum with dpe fraction
+    as weights. This will serve as the spectrum of a PhD piled up with another.
+
+    Args:
+        top (bool): whether or not we specify top array. 
+        shift (int, optional): shift in number of indicies in self convolution to make sure DPE has mean exactly as twice of SPE. Defaults to 100.
+        trunc_bound (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        dpes (1darray or float, optional): DPE fraction. Defaults to np.linspace(0.18,0.24,100).
+        spe_areas_path (str, optional): the LED calibrated SPE areaspectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
+    
+    Returns:
+        sphd_areas_indices(1darray): coordinate of area spectrum in unit of PE.
+        avg_sphd_areas(1darray): probability density of sphd in a certaint array to have area in certain PE. 
+    """
+    spe_areas_indices, spe_areas_top = get_avg_spe_area(True, trunc_bound=trunc_bound, spe_areas_path=spe_areas_path)
+    spe_areas_indices, spe_areas_bot = get_avg_spe_area(False, trunc_bound=trunc_bound, spe_areas_path=spe_areas_path)
+    dpe_areas_indices, dpe_areas_top = get_avg_dpe_area(True, shift=shift, trunc_bound=trunc_bound, spe_areas_path=spe_areas_path)
+    dpe_areas_indices, dpe_areas_bot = get_avg_dpe_area(False, shift=shift, trunc_bound=trunc_bound, spe_areas_path=spe_areas_path)
+
+    sphd_areas_indices = np.arange(trunc_bound[0], trunc_bound[1], 0.01)
+    sphd_areas_top = np.zeros((len(dpes), len(sphd_areas_indices)))
+    sphd_areas_bot = np.zeros((len(dpes), len(sphd_areas_indices)))    
+    
+    if type(dpes) == float:
+        dpes = np.array(dpes)
+    for i,dpe in enumerate(dpes):
+        sphd_areas_top[i] = spe_areas_top*(1-dpe) + dpe_areas_top*dpe
+        sphd_areas_top[i] = sphd_areas_top[i]/sphd_areas_top[i].sum() # normallization for security
+        sphd_areas_bot[i] = spe_areas_bot*(1-dpe) + dpe_areas_bot*dpe
+        sphd_areas_bot[i] = sphd_areas_bot[i]/sphd_areas_bot[i].sum() # normallization for security
+
+    if top:
+        return sphd_areas_indices, sphd_areas_top
+    else:
+        return sphd_areas_indices, sphd_areas_bot
+
+
+def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/combpile/maps/'):
+    """From argon S1 get single photon recorded spectrum without pile-up.
+
+    Args:
+        top (bool): whether or not we specify top array. 
+        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load.  Defaults to '/home/yuanlq/combpile/maps/'.
+
+    Returns:
+        sphr_areas_indices(1darray): coordinate of area spectrum in unit of PE.
+        avg_sphr_areas(1darray): probability density of sphr without pile-up in a certaint array to have area in certain PE. 
+    """
+    sphr_areas_top = np.load(sphr_areas_path+'sphr_areas_top.npy')
+    sphr_areas_bot = np.load(sphr_areas_path+'sphr_areas_bot.npy')
+    sphr_areas_indices = np.load(sphr_areas_path+'sphr_areas_indices.npy')
+
+    if top:
+        return sphr_areas_indices, sphr_areas_top
+    else:
+        return sphr_areas_indices, sphr_areas_bot
+
+
+def get_avg_phr_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0.18,0.24,100), pile_probs=np.linspace(0,0.4,100),
+                     spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv',
+                     sphr_areas_path='/home/yuanlq/combpile/maps/'):
+    """From LED calibration and ar37 S1 data get the area spectrum of PhR in different pile-up fraction and dpes.
+
+    Args:
+        top (bool): whether or not we specify top array. 
+        shift (int, optional): shift in number of indicies in self convolution to make sure DPE has mean exactly as twice of SPE. Defaults to 100.
+        trunc_bound (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        dpes (1darray or float, optional): DPE fraction. Defaults to np.linspace(0.18,0.24,100).
+        pile_probs (1darray or float, optional): probability of photon pile-up happens. Defaults to np.linspace(0,0.4,100).
+        spe_areas_path (str, optional): the LED calibrated SPE area spectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
+        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load. Defaults to '/home/yuanlq/combpile/maps/'.
+
+    Returns:
+        dpes (1darray): DPE fraction. 
+        pile_probs (1darray): probability of photon pile-up happens.
+        avg_phr_areas(3darray): axis0=dpes, axis1=pile_probs, axis2=areas. Normalized are spectrums for 
+    """
+    # 1darray
+    sphr_areas_indices, sphr_areas_top = get_avg_sphr_area(True,sphr_areas_path=sphr_areas_path)
+    sphr_areas_indices, sphr_areas_bot = get_avg_sphr_area(False,sphr_areas_path=sphr_areas_path)
+    # 2darray axis0=dpes
+    sphd_areas_indices, sphd_areas_top = get_avg_sphd_area(True,shift=shift, trunc_bound=trunc_bound,dpes=dpes,spe_areas_path=spe_areas_path)
+    sphd_areas_indices, sphd_areas_bot = get_avg_sphd_area(False,shift=shift, trunc_bound=trunc_bound,dpes=dpes,spe_areas_path=spe_areas_path)
+    assert sphd_areas_indices.all() == sphr_areas_indices.all(), 'The x coordinate of the SPhR and SPhD area spectrum must be the same.'
+
+    if type(dpes) == float:
+        dpes = np.array(dpes)
+    if type(pile_probs) == float:
+        pile_probs = np.array(pile_probs)
+    avg_phr_areas = np.zeros((len(dpes), len(pile_probs), len(sphd_areas_indices)))
+    for i, dpe in enumerate(dpes):
+        for j, pile_prob in enumerate(pile_probs):
+            if top:
+                # if pile-up, then sphd: you can see the under-amplified in data
+                phr_spec = (1-pile_prob)*sphr_areas_top + pile_prob*sphd_areas_top[i,:]
+            else:
+                # if pile-up, then sphd: you can see the under-amplified in data
+                phr_spec = (1-pile_prob)*sphr_areas_bot + pile_prob*sphd_areas_bot[i,:]
+            avg_phr_areas[i,j,:] = phr_spec/phr_spec.sum() # normalization again for security
+    
+    return dpes, pile_probs, avg_phr_areas
