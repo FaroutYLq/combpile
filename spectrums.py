@@ -217,8 +217,8 @@ def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100),
 
     for i,dpe in enumerate(dpes):
         for j,pile_prob in enumerate(pile_probs):
-            avg_phd_acc_top[i,j] = 1 - top_sphd_daq_loss[i]/(1-pile_prob)
-            avg_phd_acc_bot[i,j] = 1 - bot_sphd_daq_loss[i]/(1-pile_prob)
+            avg_phd_acc_top[i,j] = 1 - top_sphd_daq_loss[i]*(1-pile_prob)
+            avg_phd_acc_bot[i,j] = 1 - bot_sphd_daq_loss[i]*(1-pile_prob)
     
     if top:
         return dpes, pile_probs, avg_phd_acc_top
@@ -353,12 +353,12 @@ def get_avg_sphd_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(
         return sphd_areas_indices, sphd_areas_bot
 
 
-def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/combpile/maps/'):
+def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
     """From argon S1 get single photon recorded spectrum without pile-up.
 
     Args:
         top (bool): whether or not we specify top array. 
-        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load.  Defaults to '/home/yuanlq/combpile/maps/'.
+        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load.  Defaults to '/home/yuanlq/xenon/combpile/maps/'.
 
     Returns:
         sphr_areas_indices(1darray): coordinate of area spectrum in unit of PE.
@@ -376,7 +376,7 @@ def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/combpile/maps/'):
 
 def get_avg_phr_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0.18,0.24,100), pile_probs=np.linspace(0,0.4,100),
                      spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv',
-                     sphr_areas_path='/home/yuanlq/combpile/maps/'):
+                     sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
     """From LED calibration and ar37 S1 data get the area spectrum of PhR in different pile-up fraction and dpes.
 
     Args:
@@ -386,7 +386,7 @@ def get_avg_phr_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0
         dpes (1darray or float, optional): DPE fraction. Defaults to np.linspace(0.18,0.24,100).
         pile_probs (1darray or float, optional): probability of photon pile-up happens. Defaults to np.linspace(0,0.4,100).
         spe_areas_path (str, optional): the LED calibrated SPE area spectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
-        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load. Defaults to '/home/yuanlq/combpile/maps/'.
+        sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load. Defaults to '/home/yuanlq/xenon/combpile/maps/'.
 
     Returns:
         dpes (1darray): DPE fraction. 
