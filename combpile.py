@@ -167,24 +167,43 @@ def P_m_n(n, m, top=True, aft=0.3, n_top_ch=250, n_bot_ch=234):
     
     return prob
 
+###########
+# Pile-up #
+###########
 
-def P_pile_m2(tau=80, mu=-10, sigma=23, dt=10):
-    """Probability of pile-up happens between two phds in one channel.
+def P_pile_m(m, tau=80, mu=-10, sigma=23, dt=10):
+    """Probability of pile-up happens on a specfic photon with m-1 neighbors in the same channel. Assumed
+    all photons detected are from the same physical S1.
 
     Args:
+        m (int): number of phds in the channel of interest.
         tau (int, optional): exponential decay constant for pulse shape. Defaults to 80 ns.
         mu (int, optional): mean parameter for gaussian, which trivially shift pulse. Defaults to -10 ns.
         sigma (int, optional): width of gaussian smearing. Defaults to 23 ns.
         dt (int, optional): within this time distance two photons will be considered as piled-up. In principle, it should be very close to SPE width. Defaults to 10 ns.
 
     Returns:
-        (float): probability of pile-up happens between two phds in same channel.
+        (float): probability of pile-up happens between m phds in same channel.
     """
-    F,_ = integrate.quad(lambda t: emg_pdf(t,tau=tau, mu=mu, sigma=sigma)**2, -200, 900)
-    # F = 0.004645486388382721
-    # -200 to 900 ns for the pulse shape time range
+    assert type(dt) == int, 'dt must be an integer!'
+    assert m > 0, 'm must be larger than 0 to define pile-up!'
 
-    return 2*F*dt
+    ts = np.arange(-dt-200, dt+900) # time stamps in unit of ns
+    arrival_time_spec = emg_pdf(ts,tau=tau, mu=mu, sigma=sigma)
+    
+    # Compute integral in the no pile-up region as a funciton of time of photon of interest
+    int_no_pile_region = np.zeros(len(ts)-2*dt)
+    for i in range(len(ts)-2*dt):
+        int_no_pile_region[i] += arrival_time_spec[:i].sum() # left to pile-up window
+        int_no_pile_region[i] += arrival_time_spec[2*dt+i:].sum() # right to pile-up window
+
+    return 1-np.sum(arrival_time_spec[dt:-dt] * int_no_pile_region**(m-1))
+
+    # approximation way to calculate p_pile_m2:
+    # -200 to 900 ns for the pulse shape time range
+    # F,_ = integrate.quad(lambda t: emg_pdf(t,tau=tau, mu=mu, sigma=sigma)**2, -200, 900)
+    # (F = 0.004645486388382721)
+    # return 2*F*dt
 
 
 def P_pile_n(n, top, occupancies, degeneracies,
@@ -211,9 +230,14 @@ def P_pile_n(n, top, occupancies, degeneracies,
     # clean up pattern
     occupancies = occupancies[degeneracies!=0]
     degeneracies = degeneracies[degeneracies!=0]
+    norm = np.sum(degeneracies * occupancies)
 
     no_pile_prob_n = 0
-    p_pile_m2 = P_pile_m2(tau=tau, mu=mu, sigma=sigma, dt=dt)
+    # probability of pile-up given m photons in one channel
+    p_pile_ms = np.zeros(max_m)
+    for m in range(max_m):
+        p_pile_m = P_pile_m(m=m, tau=tau, mu=mu, sigma=sigma, dt=dt)
+        p_pile_ms[m] = p_pile_m
 
     for i in range(len(occupancies)):
         occupancy = occupancies[i]
@@ -224,10 +248,99 @@ def P_pile_n(n, top, occupancies, degeneracies,
         # the probability of a photon in one channel with certain occupancy seeing no pile-up
         p_clean_occ = 0 
         for m in range(1, min(max_m, n+1)):
-            p_clean_m = (1-p_pile_m2)**(m-1)
+            p_clean_m = 1 - p_pile_ms[m]
             p_m_n = P_m_n(n=n, m=m, top=top, aft=aft, n_top_ch=1/occupancy, n_bot_ch=1/occupancy)
             p_clean_occ += p_m_n * p_clean_m
         
-        no_pile_prob_n += degeneracy * occupancy * p_clean_occ / p_condition
+        no_pile_prob_n += degeneracy * occupancy * p_clean_occ / p_condition / norm
 
     return 1-no_pile_prob_n 
+
+
+#############
+# Tag-along #
+#############
+def P_tag_m(m, tau=80, mu=-10, sigma=23, dt=10, pre_window=30, post_window=200):
+    """Probability of tag-along happens on a specfic photon with m-1 neighbors in the same channel. Assumed
+    all photons detected are from the same physical S1.
+
+    Args:
+        m (int): number of phds in the channel of interest.
+        tau (int, optional): exponential decay constant for pulse shape. Defaults to 80 ns.
+        mu (int, optional): mean parameter for gaussian, which trivially shift pulse. Defaults to -10 ns.
+        sigma (int, optional): width of gaussian smearing. Defaults to 23 ns.
+        dt (int, optional): within this time distance two photons will be considered as piled-up. In principle, it should be very close to SPE width. Defaults to 10 ns.
+        pre_window (int, optional): this number of ns prior to trigger will be recorded in hit waveforms. Default to 30 ns.
+        post_window (int, optional): this number of ns post to trigger will be recorded in hit waveforms. Default to 200 ns.
+
+    Returns:
+        (float): probability of tag-along happens between m phds in same channel.
+    """
+    assert type(dt) == int, 'dt must be an integer!'
+    assert m > 0, 'm must be larger than 0 to define pile-up!'
+    assert min(pre_window, post_window) >= dt, 'hit extension window must be larger than pile-up window!'
+
+    ts = np.arange(-post_window-200, pre_window+900) # time stamps in unit of ns
+    arrival_time_spec = emg_pdf(ts,tau=tau, mu=mu, sigma=sigma)
+    
+    # Compute integral in the no pile-up region as a funciton of time of photon of interest
+    int_no_tag_region = np.zeros(len(ts)-pre_window-post_window)
+    for i in range(len(ts)-pre_window-post_window):
+        int_no_tag_region[i] += arrival_time_spec[:i].sum() # left to tag-along window
+        int_no_tag_region[i] += arrival_time_spec[i+post_window-dt:i+post_window+2*dt].sum() # left to pile-up window
+        int_no_tag_region[i] += arrival_time_spec[pre_window+post_window+i:].sum() # right to tag-along window
+
+    return 1-np.sum(arrival_time_spec[post_window:-pre_window] * int_no_tag_region**(m-1))
+
+
+def P_tag_n(n, top, occupancies, degeneracies,
+             tau=80, mu=-10, sigma=23, dt=10, pre_window=30, post_window=200, aft=0.3, max_m = 50):
+    """Given n photons throught the detector, what is the probability of seeing a photon to be in tag-along window of 
+    some other photons. Note that this photon doesn't have to be from a specific channel. We are averaging over all 
+    channels in a specific array. The S1 pattern is default to be not uniform.
+
+    Args:
+        n (int): number of phds throughtout the detector.
+        top (bool): whether or not we specify top array. 
+        occupancies (1darray): probability of one specific channel sees one photon when 1 phd is overseved in certain array.
+        degeneracies (1darray): number of channels in a certain array see has the corresponding occupancy.
+        tau (int, optional): exponential decay constant for pulse shape. Defaults to 80 ns.
+        mu (int, optional): mean parameter for gaussian, which trivially shift pulse. Defaults to -10 ns.
+        sigma (int, optional): width of gaussian smearing. Defaults to 23 ns.
+        dt (int, optional): within this time distance two photons will be considered as piled-up. In principle, it should be very close to SPE width. Defaults to 10 ns.
+        pre_window (int, optional): this number of ns prior to trigger will be recorded in hit waveforms. Default to 30 ns.
+        post_window (int, optional): this number of ns post to trigger will be recorded in hit waveforms. Default to 200 ns.
+        aft (float, optional): area fraction top. Defaults to 0.3
+        max_m (int, optional): Truncation value for m-loop. We will not loop over m beyond this value for computation's sake. Defaults to 35.
+
+    Returns:
+        (float): probability of an average-model channel in certain array to tag along other photons.
+    """
+    # clean up pattern
+    occupancies = occupancies[degeneracies!=0]
+    degeneracies = degeneracies[degeneracies!=0]
+    norm = np.sum(degeneracies * occupancies)
+
+    no_tag_prob_n = 0
+    # probability of tag-along given m photons in one channel
+    p_tag_ms = np.zeros(max_m)
+    for m in range(max_m):
+        p_tag_m = P_tag_m(m=m, tau=tau, mu=mu, sigma=sigma, dt=dt, pre_window=pre_window, post_window=post_window)
+        p_tag_ms[m] = p_tag_m
+
+    for i in range(len(occupancies)):
+        occupancy = occupancies[i]
+        degeneracy = degeneracies[i]
+        # Condition: at least one photon is seen in the channel of interest
+        p_condition = 1 - P_m_n(n=n, m=0, top=top, aft=aft, n_top_ch=1/occupancy,n_bot_ch=1/occupancy)
+        
+        # the probability of a photon in one channel with certain occupancy is not tagging along
+        p_clean_occ = 0 
+        for m in range(1, min(max_m, n+1)):
+            p_clean_m = 1 - p_tag_ms[m]
+            p_m_n = P_m_n(n=n, m=m, top=top, aft=aft, n_top_ch=1/occupancy, n_bot_ch=1/occupancy)
+            p_clean_occ += p_m_n * p_clean_m
+        
+        no_tag_prob_n += degeneracy * occupancy * p_clean_occ / p_condition / norm
+
+    return 1-no_tag_prob_n 
