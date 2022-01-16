@@ -8,6 +8,7 @@ Toy combinatorics model for photon pile-up and tag-along and how can we use it i
 For accessibility, results are stored in `/project2/lgrandi/yuanlq/s1_modeling_maps`.
 
 | File | type | Description |
+| ---- | ---- | ----------- |
 | `dpes.npy`| 1darray | DPE fraction coordinates |
 | `s1_nphds.npy` | 1darray | S1 number of photon detected coordinates |
 | `z_slice_median.npy` | 1darray | Median value for  Z clusters |
