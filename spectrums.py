@@ -7,6 +7,7 @@ import numpy as np
 import straxen
 import pandas as pd
 import sys
+from tqdm import tqdm
 
 
 ########################
@@ -123,8 +124,8 @@ def get_avg_sphd_amp(top, shift = 99, trunc_bound=[-10,400], dpes=np.linspace(0.
     dpe_amps_indices, dpe_amps_top = get_avg_dpe_amp(True, shift=shift, trunc_bound=trunc_bound, spe_amps_path=spe_amps_path)
     dpe_amps_indices, dpe_amps_bot = get_avg_dpe_amp(False, shift=shift, trunc_bound=trunc_bound, spe_amps_path=spe_amps_path)
 
-    if type(dpes) == float:
-        dpes = np.array(dpes)
+    if type(dpes) != np.ndarray:
+        dpes = np.array([dpes])
     sphd_amps_indices = np.arange(trunc_bound[0], trunc_bound[1])
     sphd_amps_top = np.zeros((len(dpes), trunc_bound[1]-trunc_bound[0]))
     sphd_amps_bot = np.zeros((len(dpes), trunc_bound[1]-trunc_bound[0]))    
@@ -162,8 +163,8 @@ def get_avg_dphd_amp(top, shift_dphd=10, shift = 99, trunc_bound=[-10,400], dpes
                                                        spe_amps_path=spe_amps_path)
     sphd_amps_indices, sphd_amps_bot = get_avg_sphd_amp(top=False,shift = shift,trunc_bound=trunc_bound, dpes=dpes,
                                                        spe_amps_path=spe_amps_path)
-    if type(dpes) == float:
-        dpes = np.array(dpes)
+    if type(dpes) != np.ndarray:
+        dpes = np.array([dpes])
     dphd_amps_top = np.zeros((len(dpes), 2*len(sphd_amps_indices)-1))
     dphd_amps_bot = np.zeros((len(dpes), 2*len(sphd_amps_indices)-1))
 
@@ -180,7 +181,7 @@ def get_avg_dphd_amp(top, shift_dphd=10, shift = 99, trunc_bound=[-10,400], dpes
         return dphd_amps_indices, dphd_amps_bot
 
 
-def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100), 
+def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100), tag_probs=np.linspace(0,0.8,100), 
                     shift = 99, trunc_bound=[-10,400], dpes=np.linspace(0.18,0.24,100),
                     spe_amps_path='/dali/lgrandi/led_calibration/SPE_acceptance/20210713/spe_025420_025418.npz'):
     """From LED calibration result, get the average phd acceptance for case of different dpe fraction and pile-up 
@@ -190,6 +191,7 @@ def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100),
         top (bool): whether or not we specify top array. 
         adc_threshold (int): below this amplitude in unit of ADC the photon will be dropped by DAQ.
         pile_probs (1darray or float, optional): probability of photon pile-up happens. Defaults to np.linspace(0,0.4,100).
+        tag_probs (1darray or float, optional): probability of photon tag-along happens. Defaults to np.linspace(0,0.8,100).
         shift (int, optional): shift in number of indicies in self convolution to make sure DPE has mean exactly as twice of SPE. Defaults to 99.
         trunc_bound (list, optional): ADC range that we keep the spectrums. Defaults to [-10,400].
         dpes (1darray or float, optional): DPE fraction. Defaults to np.linspace(0.18,0.24,100).
@@ -198,32 +200,28 @@ def get_avg_phd_acc(top, adc_threshold=15, pile_probs=np.linspace(0,0.4,100),
     Returns:
         dpes (1darray): DPE fraction.
         pile_probs (1darray): probability of photon pile-up happens.
-        avg_phd_acc (2darray): axis0=dpes, axis1=pile_probs. Average acceptance of a PhD in a certain array with certain p_dpe and pile-up fraction.
+        tag__probs (1darray): probability of photon tag-along happens.
+        avg_phd_acc (3darray): axis0=dpes, axis1=pile_probs, axis2=tag_probs. Average acceptance of a PhD in a certain array with certain p_dpe and pile-up fraction.
     """
-    sphd_amps_indices, sphd_amps_top = get_avg_sphd_amp(top=True,shift = shift,trunc_bound=trunc_bound, dpes=dpes,
-                                                       spe_amps_path=spe_amps_path)
-    sphd_amps_indices, sphd_amps_bot = get_avg_sphd_amp(top=False,shift = shift,trunc_bound=trunc_bound, dpes=dpes,
+    sphd_amps_indices, sphd_amps = get_avg_sphd_amp(top=top,shift = shift,trunc_bound=trunc_bound, dpes=dpes,
                                                        spe_amps_path=spe_amps_path)
     
-    top_sphd_daq_loss = np.sum(sphd_amps_top[:,:np.where(sphd_amps_indices==adc_threshold)[0][0]+1], axis=1)
-    bot_sphd_daq_loss = np.sum(sphd_amps_bot[:,:np.where(sphd_amps_indices==adc_threshold)[0][0]+1], axis=1)
+    sphd_daq_loss = np.sum(sphd_amps[:,:np.where(sphd_amps_indices==adc_threshold)[0][0]+1], axis=1)
 
-    if type(dpes) == float:
-        dpes = np.array(dpes)
-    if type(pile_probs) == float:
-        pile_probs = np.array(pile_probs)
-    avg_phd_acc_top = np.zeros((len(dpes), len(pile_probs)))
-    avg_phd_acc_bot = np.zeros((len(dpes), len(pile_probs)))
+    if type(dpes) != np.ndarray:
+        dpes = np.array([dpes])
+    if type(pile_probs) != np.ndarray:
+        pile_probs = np.array([pile_probs])
+    if type(tag_probs) != np.ndarray:
+        tag_probs = np.array([tag_probs])
+    avg_phd_acc = np.zeros((len(dpes), len(pile_probs), len(tag_probs)))
 
     for i,dpe in enumerate(dpes):
         for j,pile_prob in enumerate(pile_probs):
-            avg_phd_acc_top[i,j] = 1 - top_sphd_daq_loss[i]*(1-pile_prob)
-            avg_phd_acc_bot[i,j] = 1 - bot_sphd_daq_loss[i]*(1-pile_prob)
-    
-    if top:
-        return dpes, pile_probs, avg_phd_acc_top
-    else:
-        return dpes, pile_probs, avg_phd_acc_bot
+            for k,tag_prob in enumerate(tag_probs):
+                avg_phd_acc[i,j,k] = pile_prob + (1-pile_prob) * (1-sphd_daq_loss[i] + sphd_daq_loss[i]*tag_prob)
+
+    return dpes, pile_probs, tag_probs, avg_phd_acc
 
 
 ##################
@@ -339,8 +337,8 @@ def get_avg_sphd_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(
     sphd_areas_top = np.zeros((len(dpes), len(sphd_areas_indices)))
     sphd_areas_bot = np.zeros((len(dpes), len(sphd_areas_indices)))    
     
-    if type(dpes) == float:
-        dpes = np.array(dpes)
+    if type(dpes) != np.ndarray:
+        dpes = np.array([dpes])
     for i,dpe in enumerate(dpes):
         sphd_areas_top[i] = spe_areas_top*(1-dpe) + dpe_areas_top*dpe
         sphd_areas_top[i] = sphd_areas_top[i]/sphd_areas_top[i].sum() # normallization for security
@@ -374,7 +372,9 @@ def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
         return sphr_areas_indices, sphr_areas_bot
 
 
-def get_avg_phr_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0.18,0.24,100), pile_probs=np.linspace(0,0.4,100),
+def get_avg_phr_area(top, shift = 100, trunc_bound_pe=[-1,4.99], trunc_bound_adc=[-10,400], adc_threshold=15, 
+                     dpes=np.linspace(0.18,0.24,100), pile_probs=np.linspace(0,0.4,100), tag_probs=np.linspace(0,0.8,100), 
+                     spe_amps_path='/dali/lgrandi/led_calibration/SPE_acceptance/20210713/spe_025420_025418.npz',
                      spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv',
                      sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
     """From LED calibration and ar37 S1 data get the area spectrum of PhR in different pile-up fraction and dpes.
@@ -382,38 +382,46 @@ def get_avg_phr_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(0
     Args:
         top (bool): whether or not we specify top array. 
         shift (int, optional): shift in number of indicies in self convolution to make sure DPE has mean exactly as twice of SPE. Defaults to 100.
-        trunc_bound (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        trunc_bound_pe (list, optional): area range in unit of PE that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-1,4.99].
+        trunc_bound_adc (list, optional): ADC range that we keep the spectrums. Please put None if you don't want any truncation. Defaults to [-10,400].
+        adc_threshold (int): below this amplitude in unit of ADC the photon will be dropped by DAQ.
         dpes (1darray or float, optional): DPE fraction. Defaults to np.linspace(0.18,0.24,100).
         pile_probs (1darray or float, optional): probability of photon pile-up happens. Defaults to np.linspace(0,0.4,100).
+        tag_probs (1darray or float, optional): probability of photon tag-along happens. Defaults to np.linspace(0,0.8,100).
+        spe_amps_path (str, optional): the LED calibrated SPE amplitude spectrum to load. Defaults to '/dali/lgrandi/led_calibration/SPE_acceptance/20210713/spe_025420_025418.npz'.
         spe_areas_path (str, optional): the LED calibrated SPE area spectrum to load. Defaults to '/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv'
         sphr_areas_path (str, optional): the path to ar37 S1 based SPhR area spectrum to load. Defaults to '/home/yuanlq/xenon/combpile/maps/'.
 
     Returns:
         dpes (1darray): DPE fraction. 
         pile_probs (1darray): probability of photon pile-up happens.
-        avg_phr_areas(3darray): axis0=dpes, axis1=pile_probs, axis2=areas. Normalized are spectrums for 
+        tag_probs (1darray or float, optional): probability of photon tag-along happens. 
+        avg_phr_areas(4darray): axis0=dpes, axis1=pile_probs, axis, axis3=areas. Normalized are spectrums for 
     """
     # 1darray
-    sphr_areas_indices, sphr_areas_top = get_avg_sphr_area(True,sphr_areas_path=sphr_areas_path)
-    sphr_areas_indices, sphr_areas_bot = get_avg_sphr_area(False,sphr_areas_path=sphr_areas_path)
+    sphr_areas_indices, sphr_areas = get_avg_sphr_area(top,sphr_areas_path=sphr_areas_path)
     # 2darray axis0=dpes
-    sphd_areas_indices, sphd_areas_top = get_avg_sphd_area(True,shift=shift, trunc_bound=trunc_bound,dpes=dpes,spe_areas_path=spe_areas_path)
-    sphd_areas_indices, sphd_areas_bot = get_avg_sphd_area(False,shift=shift, trunc_bound=trunc_bound,dpes=dpes,spe_areas_path=spe_areas_path)
+    sphd_areas_indices, sphd_areas = get_avg_sphd_area(top,shift=shift, trunc_bound=trunc_bound_pe,dpes=dpes,spe_areas_path=spe_areas_path)
     assert sphd_areas_indices.all() == sphr_areas_indices.all(), 'The x coordinate of the SPhR and SPhD area spectrum must be the same.'
 
-    if type(dpes) == float:
-        dpes = np.array(dpes)
-    if type(pile_probs) == float:
-        pile_probs = np.array(pile_probs)
-    avg_phr_areas = np.zeros((len(dpes), len(pile_probs), len(sphd_areas_indices)))
-    for i, dpe in enumerate(dpes):
-        for j, pile_prob in enumerate(pile_probs):
-            if top:
-                # if pile-up, then sphd: you can see the under-amplified in data
-                phr_spec = (1-pile_prob)*sphr_areas_top + pile_prob*sphd_areas_top[i,:]
-            else:
-                # if pile-up, then sphd: you can see the under-amplified in data
-                phr_spec = (1-pile_prob)*sphr_areas_bot + pile_prob*sphd_areas_bot[i,:]
-            avg_phr_areas[i,j,:] = phr_spec/phr_spec.sum() # normalization again for security
+    sphd_amps_indices, sphd_amps = get_avg_sphd_amp(top=top,shift = shift,trunc_bound=trunc_bound_adc, dpes=dpes,
+                                                    spe_amps_path=spe_amps_path)
     
-    return dpes, pile_probs, avg_phr_areas
+    sphd_daq_loss = np.sum(sphd_amps[:,:np.where(sphd_amps_indices==adc_threshold)[0][0]+1], axis=1)
+
+    if type(dpes) != np.ndarray:
+        dpes = np.array([dpes])
+    if type(pile_probs) != np.ndarray:
+        pile_probs = np.array([pile_probs])
+    if type(tag_probs) != np.ndarray:
+        tag_probs = np.array([tag_probs])
+    avg_phr_areas = np.zeros((len(dpes), len(pile_probs), len(tag_probs), len(sphd_areas_indices)))
+    for i, dpe in tqdm(enumerate(dpes)):
+        for j, pile_prob in enumerate(pile_probs):
+            for k, tag_prob in enumerate(tag_probs):
+                # spectrum when not piled up
+                not_piled = (1-sphd_daq_loss[i]) * sphr_areas + sphd_daq_loss[i] * tag_prob * sphd_areas[i]
+                not_piled = not_piled/not_piled.sum() # normalization
+                avg_phr_areas[i,j,k,:] = pile_prob * sphd_areas[i] + (1-pile_prob)*not_piled
+    
+    return dpes, pile_probs, tag_probs, avg_phr_areas
