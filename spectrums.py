@@ -351,7 +351,7 @@ def get_avg_sphd_area(top, shift = 100, trunc_bound=[-1,4.99], dpes=np.linspace(
         return sphd_areas_indices, sphd_areas_bot
 
 
-def get_avg_sphr_area(top, sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
+def get_avg_sphr_area(top, sphr_areas_path='/project2/lgrandi/yuanlq/shared/s1_modeling_maps/middle_steps/'):
     """From argon S1 get single photon recorded spectrum without pile-up.
 
     Args:
@@ -376,7 +376,7 @@ def get_avg_phr_area(top, shift = 100, trunc_bound_pe=[-1,4.99], trunc_bound_adc
                      dpes=np.linspace(0.18,0.24,100), pile_probs=np.linspace(0,0.4,100), tag_probs=np.linspace(0,0.8,100), 
                      spe_amps_path='/dali/lgrandi/led_calibration/SPE_acceptance/20210713/spe_025420_025418.npz',
                      spe_areas_path='/dali/lgrandi/giovo/XENONnT/Utility/SPEshape/20210713/old/alt_2_default/df_spe_shape_20210713_alt.csv',
-                     sphr_areas_path='/home/yuanlq/xenon/combpile/maps/'):
+                     sphr_areas_path='/project2/lgrandi/yuanlq/shared/s1_modeling_maps/middle_steps/'):
     """From LED calibration and ar37 S1 data get the area spectrum of PhR in different pile-up fraction and dpes.
 
     Args:
